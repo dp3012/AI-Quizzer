@@ -1,0 +1,65 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.pyo
+*.pyd
+
+# -------------------------
+# Virtual Environment
+# -------------------------
+venv/
+ENV/
+env/
+.venv/
+
+# -------------------------
+# Django
+# -------------------------
+*.log
+db.sqlite3
+media/
+staticfiles/
+
+# -------------------------
+# FastAPI / Uvicorn
+# -------------------------
+*.pid
+
+# -------------------------
+# Environment / Config
+# -------------------------
+.env
+*.env
+.env.*
+
+# -------------------------
+# IDE / Editor
+# -------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# -------------------------
+# OS specific
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# Testing / Coverage
+# -------------------------
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.mypy_cache/
+.pytype/
