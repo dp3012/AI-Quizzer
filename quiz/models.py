@@ -8,8 +8,11 @@ class UserProfile(models.Model):
     
 class Quiz(models.Model):
     title = models.CharField(max_length=255)
-    created_at = models.DateTimeField(auto_now_add=True)
+    subject = models.CharField(max_length=100, null=True, blank=True)
+    grade = models.IntegerField(default=1, null=True, blank=True)
     difficulty = models.CharField(max_length=50, default="medium")
+    max_score = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return self.title
 
@@ -17,7 +20,7 @@ class Question(models.Model):
     quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name="questions")
     text = models.TextField()
     options = models.JSONField(default=list)   # list of options ["A", "B", "C", "D"]
-    correct_answer = models.CharField(max_length=50)
+    correct_answer = models.CharField(max_length=250)
     def __str__(self):
         return f"Question for {self.quiz.title}"
     
