@@ -20,7 +20,7 @@ import datetime
 import re
 from django.utils import timezone
 from django.contrib.auth.models import User
-from django.db.models import Q
+from django.db.models import Q, Max
 from typing import List, Optional
 from . import ai_service
 from quiz.models import UserProfile, Quiz, Question, Submission
@@ -88,6 +88,10 @@ class SubmissionOut(BaseModel):
     submitted_at: datetime.datetime
     is_retry: bool
 
+class LeaderboardEntry(BaseModel):
+    rank: int
+    username: str
+    top_score: int
 # === Authentication & User Handling ===
 def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> User:
     """
@@ -131,6 +135,7 @@ def login(payload: LoginIn):
 def protected_example(username: str = Depends(get_current_user)):
     return {"msg": f"Hello {username}. Token valid."}
 
+
 # === API Endpoints ===
 hint_cache = {}
 
@@ -139,26 +144,16 @@ def generate_quiz(payload: GenerateQuizIn, user: User = Depends(get_current_user
     """
     Generates a new quiz, eventually using AI and adaptive difficulty.
     """
-    # --- AI Feature: Adaptive Question Difficulty ---
-    # TODO: AI Integration
-    # 1. Fetch user's performance history from their UserProfile.
-    #    user_profile = user.profile
-    #    performance = user_profile.performance_metrics.get(payload.subject, {"correct": 0, "total": 0})
-    #    success_rate = performance['correct'] / performance['total'] if performance['total'] > 0 else 0.5
-    # 2. Based on success_rate, determine the mix of easy/medium/hard questions.
-    #    e.g., if success_rate < 0.4, generate 5 easy, 3 medium, 2 hard.
-    # 3. Call your AI model to generate questions with the specified difficulty.
     
     user_profile = user.profile
     performance = user_profile.performance_metrics.get(payload.subject, {"correct": 0, "total": 0})
     success_rate = performance['correct'] / performance['total'] if performance['total'] > 0 else 0.5
 
-    # Mock Implementation
     quiz = Quiz.objects.create(
         title=f'{payload.subject} Quiz for Grade {payload.grade}',
         grade=payload.grade,
         subject=payload.subject,
-        max_score=payload.max_score, # <-- Save the max_score
+        max_score=payload.max_score, 
     )
 
     prompt = (
@@ -189,7 +184,6 @@ def generate_quiz(payload: GenerateQuizIn, user: User = Depends(get_current_user
             questions_to_create.append(q)
 
         if not questions_to_create:
-            # Fallback if AI fails or returns empty list
             raise ValueError("AI returned no valid questions.")
         
         Question.objects.bulk_create(questions_to_create)
@@ -220,11 +214,10 @@ def submit_quiz(payload: QuizSubmitRequest, user: User = Depends(get_current_use
     questions = {q.id: q for q in quiz.questions.all()}
     total_questions = len(questions)
     
-    # --- New Scoring Logic ---
+    # --- Scoring Logic ---
     if total_questions == 0:
         points_per_question = 0
     else:
-        # Calculate the value of each question
         points_per_question = quiz.max_score / total_questions
     
     correct_count = 0
@@ -240,7 +233,7 @@ def submit_quiz(payload: QuizSubmitRequest, user: User = Depends(get_current_use
         is_correct = resp.userResponse.strip().lower() == question.correct_answer.strip().lower()
         if is_correct:
             correct_count += 1
-            calculated_score += points_per_question # <-- Add points, not just 1
+            calculated_score += points_per_question 
         
         detailed_results.append({
             "question_id": question.id,
@@ -250,14 +243,13 @@ def submit_quiz(payload: QuizSubmitRequest, user: User = Depends(get_current_use
         })
         user_answers[str(question.id)] = resp.userResponse
     
-    # Create the submission record with the new score
     submission = Submission.objects.create(
         quiz=quiz,
         user=user,
         answers=user_answers,
         results=detailed_results,
-        score=round(calculated_score), # <-- Use the calculated score (rounded)
-        max_score=quiz.max_score, # <-- Store the quiz's max_score
+        score=round(calculated_score), 
+        max_score=quiz.max_score, 
     )
 
     wrong_questions = []
@@ -349,8 +341,8 @@ def retry_quiz(submission_id: int, user: User = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Submission not found or you do not have permission to retry it.")
 
     quiz = submission.quiz
-    # The submission itself will be marked as a retry upon next submission
-    # For now, we just return the quiz data again for the user to take.
+    # the submission itself will be marked as a retry upon next submission
+    # for now, we just return the quiz data again for the user to take
     return QuizOut(
         quiz_id=quiz.id,
         title=quiz.title,
@@ -384,11 +376,29 @@ def get_hint(payload: HintRequest, user: User = Depends(get_current_user)):
     # Cache the hint
     hint_cache[payload.questionId] = ai_hint.strip()
 
-    # # --- AI Feature: Hint Generation ---
-    # # TODO: AI Integration
-    # # 1. Pass the question.text and question.options to your AI model.
-    # # 2. Ask it to generate a helpful, non-direct hint.
-    # ai_hint = f"Mock Hint: Think about what happens when you add the two numbers in the question: '{question.text}'" # Mock response
-    # # --- End AI Integration ---
-
     return {"questionId": question.id, "hint": ai_hint.strip()}
+
+@app.post("/leaderboard", response_model=List[LeaderboardEntry])
+def get_leaderboard(
+    subject: Optional[str] = Query(None),
+    grade: Optional[int] = Query(None)
+):
+    """
+    Retrieves the top 10 user scores for a given subject and/or grade.
+    If no filters are provided, it returns the overall top 10 scores.
+    """
+    submissions = Submission.objects.all()
+
+    if subject:
+        submissions = submissions.filter(quiz__subject__iexact=subject)
+    if grade:
+        submissions = submissions.filter(quiz__grade=grade)
+
+    leaderboard_data = submissions.values('user__username').annotate(top_score=Max('score')).order_by('-top_score')[:10]
+
+    response = [
+        LeaderboardEntry(rank=i + 1, username=entry['user__username'], top_score=entry['top_score'])
+        for i, entry in enumerate(leaderboard_data)
+    ]
+
+    return response
