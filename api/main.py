@@ -15,11 +15,14 @@ from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 import jwt
+import json
 import datetime
+import re
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.db.models import Q
 from typing import List, Optional
+from . import ai_service
 from quiz.models import UserProfile, Quiz, Question, Submission
 
 # secret + algorithm from env (or fallback to Django SECRET_KEY)
@@ -129,6 +132,8 @@ def protected_example(username: str = Depends(get_current_user)):
     return {"msg": f"Hello {username}. Token valid."}
 
 # === API Endpoints ===
+hint_cache = {}
+
 @app.post("/quiz/generate", response_model=QuizOut)
 def generate_quiz(payload: GenerateQuizIn, user: User = Depends(get_current_user)):
     """
@@ -144,6 +149,10 @@ def generate_quiz(payload: GenerateQuizIn, user: User = Depends(get_current_user
     #    e.g., if success_rate < 0.4, generate 5 easy, 3 medium, 2 hard.
     # 3. Call your AI model to generate questions with the specified difficulty.
     
+    user_profile = user.profile
+    performance = user_profile.performance_metrics.get(payload.subject, {"correct": 0, "total": 0})
+    success_rate = performance['correct'] / performance['total'] if performance['total'] > 0 else 0.5
+
     # Mock Implementation
     quiz = Quiz.objects.create(
         title=f'{payload.subject} Quiz for Grade {payload.grade}',
@@ -152,19 +161,43 @@ def generate_quiz(payload: GenerateQuizIn, user: User = Depends(get_current_user
         max_score=payload.max_score, # <-- Save the max_score
     )
 
-    questions_to_create = []
-    difficulties = ['easy'] * 5 + ['medium'] * 3 + ['hard'] * 2 # Mock distribution
-    for i in range(payload.total_questions):
-        q = Question(
-            quiz=quiz,
-            text=f"Mock '{difficulties[i]}' question {i+1} for {payload.subject}?",
-            options={"choices": ["A", "B", "C", "D"]},
-            correct_answer="A",
-            difficulty=difficulties[i]
-        )
-        questions_to_create.append(q)
-    Question.objects.bulk_create(questions_to_create)
-    # --- End Mock Implementation ---
+    prompt = (
+        f'You are a quiz generation AI. Generate {payload.total_questions} multiple-choice questions for a quiz on the subject of "{payload.subject}" for a grade {payload.grade} student. '
+        f'The student has a historical success rate of {success_rate:.0%} in this subject, so adjust the difficulty mix accordingly (e.g., more easy questions for low success rate). '
+        'Provide your response as a single valid JSON object. Do not include any text, code block formatting, or explanations before or after the JSON object. '
+        'The JSON object must contain a single key "questions" which is a list of question objects. '
+        'Each question object must have exactly these keys: "text" (string), "options" (a list of 4 strings), "correct_answer" (a string that is one of the options), and "difficulty" (a string: "easy", "medium", or "hard").'
+    )
+
+    try:
+        ai_response = ai_service.generate_json_response(prompt)
+        questions_data = ai_response.get("questions", [])
+
+        questions_to_create = []
+        for q_data in questions_data:
+            # Basic validation
+            if not all(key in q_data for key in ["text", "options", "correct_answer", "difficulty"]):
+                continue # Skip malformed question data
+
+            q = Question(
+                quiz=quiz,
+                text=q_data["text"],
+                options={"choices": q_data["options"]},
+                correct_answer=q_data["correct_answer"],
+                difficulty=q_data["difficulty"]
+            )
+            questions_to_create.append(q)
+
+        if not questions_to_create:
+            # Fallback if AI fails or returns empty list
+            raise ValueError("AI returned no valid questions.")
+        
+        Question.objects.bulk_create(questions_to_create)
+
+    except (HTTPException, ValueError) as e:
+        quiz.delete()
+        print(f"AI generation failed, falling back. Error: {e}")
+        raise HTTPException(status_code=500, detail="AI service failed to generate the quiz.")
     
     return QuizOut(
         quiz_id=quiz.id,
@@ -226,16 +259,39 @@ def submit_quiz(payload: QuizSubmitRequest, user: User = Depends(get_current_use
         score=round(calculated_score), # <-- Use the calculated score (rounded)
         max_score=quiz.max_score, # <-- Store the quiz's max_score
     )
-    # --- AI Feature: Result Suggestions ---
-    # TODO: AI Integration
-    # 1. Analyze the `detailed_results` list for incorrect answers.
-    # 2. Get the text of the questions the user got wrong.
-    # 3. Send these topics/questions to your AI model and ask for 2 improvement tips.
-    ai_suggestions = [
-        "Suggestion 1: Review the topic of photosynthesis.",
-        "Suggestion 2: Practice more problems involving fractions."
-    ] # Mock response
-    # --- End AI Integration ---
+
+    wrong_questions = []
+    for result in detailed_results:
+        if not result["is_correct"]:
+            # find full question text from the questions map
+            question_text = questions.get(result['question_id']).text
+            wrong_questions.append(question_text)
+
+    ai_suggestions = ["No specific suggestions at this time."]
+    if wrong_questions:
+        missed = "\n- ".join(wrong_questions)
+        prompt = (
+            f"You are an encouraging tutor. A student missed the following questions in a '{quiz.subject}' quiz. "
+            f"Based on these mistakes, provide exactly two distinct, actionable tips for improvement. "
+            f"Keep the tips concise and encouraging. Start each tip with a bullet point. "
+            f"Do not explain the answers, focus on the underlying concepts.\n"
+            f"Missed Questions:\n- {missed}"
+        )
+        suggestions_text = ai_service.generate_text_response(prompt)
+        ai_suggestions = [
+            t.strip(" *\n") for t in re.split(r"\n\s*\*\s+", suggestions_text) if t.strip()
+        ]
+
+    # # --- AI Feature: Result Suggestions ---
+    # # TODO: AI Integration
+    # # 1. Analyze the `detailed_results` list for incorrect answers.
+    # # 2. Get the text of the questions the user got wrong.
+    # # 3. Send these topics/questions to your AI model and ask for 2 improvement tips.
+    # ai_suggestions = [
+    #     "Suggestion 1: Review the topic of photosynthesis.",
+    #     "Suggestion 2: Practice more problems involving fractions."
+    # ] # Mock response
+    # # --- End AI Integration ---
     return {
         "submissionId": submission.id,
         "score": submission.score,
@@ -308,16 +364,31 @@ def get_hint(payload: HintRequest, user: User = Depends(get_current_user)):
     """
     Provides an AI-generated hint for a specific question.
     """
+    # Caching logic
+    if payload.questionId in hint_cache:
+        return {"questionId": payload.questionId, "hint": hint_cache[payload.questionId]}
+    
     try:
         question = Question.objects.get(id=payload.questionId)
     except Question.DoesNotExist:
         raise HTTPException(status_code=404, detail="Question not found")
+    
+    prompt = (
+        f"You are a helpful quiz assistant. Provide a short, one-sentence hint for the following multiple-choice question. "
+        f"The hint must guide the user toward the correct thinking process without revealing the answer. "
+        f"Question: \"{question.text}\" Options: {question.options.get('choices', [])}"
+    )
 
-    # --- AI Feature: Hint Generation ---
-    # TODO: AI Integration
-    # 1. Pass the question.text and question.options to your AI model.
-    # 2. Ask it to generate a helpful, non-direct hint.
-    ai_hint = f"Mock Hint: Think about what happens when you add the two numbers in the question: '{question.text}'" # Mock response
-    # --- End AI Integration ---
+    ai_hint = ai_service.generate_text_response(prompt)
 
-    return {"questionId": question.id, "hint": ai_hint}
+    # Cache the hint
+    hint_cache[payload.questionId] = ai_hint.strip()
+
+    # # --- AI Feature: Hint Generation ---
+    # # TODO: AI Integration
+    # # 1. Pass the question.text and question.options to your AI model.
+    # # 2. Ask it to generate a helpful, non-direct hint.
+    # ai_hint = f"Mock Hint: Think about what happens when you add the two numbers in the question: '{question.text}'" # Mock response
+    # # --- End AI Integration ---
+
+    return {"questionId": question.id, "hint": ai_hint.strip()}
