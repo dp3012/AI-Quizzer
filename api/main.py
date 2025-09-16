@@ -13,6 +13,7 @@ django.setup()
 
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 import jwt
 import json
@@ -74,12 +75,6 @@ class QuizOut(BaseModel):
     grade: int
     questions: List[QuestionOut]
 
-class SubmissionResultOut(BaseModel):
-    question_id: int
-    is_correct: bool
-    user_answer: str
-    correct_answer: str
-
 class SubmissionOut(BaseModel):
     id: int
     quiz_title: str
@@ -88,15 +83,173 @@ class SubmissionOut(BaseModel):
     submitted_at: datetime.datetime
     is_retry: bool
 
+class QuestionReview(BaseModel):
+    question_text: str
+    your_answer: str
+    correct_answer: str
+    is_correct: bool
+
+class SubmissionReviewOut(BaseModel):
+    submission_id: int
+    quiz_title: str
+    score: int
+    max_score: int
+    submitted_at: datetime.datetime
+    questions: List[QuestionReview]
+
 class LeaderboardEntry(BaseModel):
     rank: int
     username: str
     top_score: int
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def root():
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AI Quizzer API</title>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+            
+            body {
+                font-family: 'Roboto Mono', monospace;
+                background-color: #121212;
+                color: #e0e0e0;
+                margin: 0;
+                padding: 40px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                box-sizing: border-box;
+            }
+            .container {
+                max-width: 800px;
+                width: 100%;
+                background-color: #1e1e1e;
+                border: 1px solid #333;
+                border-radius: 8px;
+                padding: 40px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                text-align: center;
+            }
+            h1 {
+                color: #bb86fc;
+                font-size: 2.5em;
+                margin-bottom: 10px;
+            }
+            p {
+                font-size: 1.1em;
+                line-height: 1.6;
+            }
+            .status {
+                display: inline-block;
+                background-color: #03dac6;
+                color: #121212;
+                padding: 8px 15px;
+                border-radius: 20px;
+                font-weight: bold;
+                margin: 20px 0;
+            }
+            .section {
+                text-align: left;
+                margin-top: 40px;
+                border-top: 1px solid #333;
+                padding-top: 20px;
+            }
+            h2 {
+                color: #03dac6;
+                font-size: 1.8em;
+                border-bottom: 2px solid #bb86fc;
+                padding-bottom: 10px;
+                margin-bottom: 20px;
+            }
+            ul {
+                list-style: none;
+                padding: 0;
+            }
+            li {
+                background-color: #2a2a2a;
+                padding: 15px;
+                border-radius: 5px;
+                margin-bottom: 10px;
+                font-size: 1.1em;
+            }
+            .buttons {
+                margin-top: 30px;
+                display: flex;
+                justify-content: center;
+                gap: 20px;
+            }
+            a.button {
+                text-decoration: none;
+                color: #121212;
+                background-color: #bb86fc;
+                padding: 15px 30px;
+                border-radius: 5px;
+                font-weight: bold;
+                transition: transform 0.2s, background-color 0.2s;
+            }
+            a.button:hover {
+                transform: translateY(-3px);
+                background-color: #cf9fff;
+            }
+            a.button-secondary {
+                background-color: #03dac6;
+            }
+            a.button-secondary:hover {
+                background-color: #5dfde9;
+            }
+            .tech-stack {
+                margin-top: 40px;
+                font-size: 0.9em;
+                color: #4DB6AC;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>AI Quizzer APP</h1>
+            <p>A smart, adaptive quiz generation and evaluation service.</p>
+            <div class="status">App is Online</div>
+
+            <div class="section">
+                <h2>Getting Started</h2>
+                <p>Interact with the APIs through the documentation or your favorite API client.</p>
+                <div class="buttons">
+                    <a href="/docs" class="button">API Docs</a>
+                    <a href="https://github.com/dp3012/AI-Quizzer" class="button button-secondary" target="_blank">GitHub Repo</a>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Key Features</h2>
+                <ul>
+                    <li><strong>Adaptive Quiz Generation:</strong> Creates quizzes tailored to user performance.</li>
+                    <li><strong>AI-Powered Hints:</strong> Provides helpful hints without giving away the answer.</li>
+                    <li><strong>Smart Result Suggestions:</strong> Offers personalized improvement tips.</li>
+                    <li><strong>Comprehensive History:</strong> Tracks submissions with advanced filtering.</li>
+                    <li><strong>Leaderboard:</strong> Ranks top performers by subject and grade.</li>
+                </ul>
+            </div>
+
+            <div class="tech-stack">
+                <p><strong style="color: #bb86fc;">Tech Stack:</strong> FastAPI | Django ORM | PostgreSQL | Docker | Gemini AI | Render</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
 # === Authentication & User Handling ===
 def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> User:
     """
-    Decodes JWT token and returns the corresponding Django User object.
-    Creates the user if they don't exist (useful for this mock setup).
+    Decodes JWT token and returns the corresponding Django User object if valid.
     """
     token = creds.credentials
     try:
@@ -162,6 +315,8 @@ def generate_quiz(payload: GenerateQuizIn, user: User = Depends(get_current_user
         'Provide your response as a single valid JSON object. Do not include any text, code block formatting, or explanations before or after the JSON object. '
         'The JSON object must contain a single key "questions" which is a list of question objects. '
         'Each question object must have exactly these keys: "text" (string), "options" (a list of 4 strings), "correct_answer" (a string that is one of the options), and "difficulty" (a string: "easy", "medium", or "hard").'
+        'Crucially, each option in the "options" list must be a string prefixed with "A. ", "B. ", "C. ", or "D. ". '
+        'The "correct_answer" key must contain ONLY the capital letter of the correct option (e.g., "A", "B", "C", or "D").'
     )
 
     try:
@@ -224,17 +379,25 @@ def submit_quiz(payload: QuizSubmitRequest, user: User = Depends(get_current_use
     calculated_score = 0
     detailed_results = []
     user_answers = {}
+    detailed_breakdown = []
 
     for resp in payload.responses:
         question = questions.get(resp.questionId)
         if not question:
             continue
 
-        is_correct = resp.userResponse.strip().lower() == question.correct_answer.strip().lower()
+        is_correct = resp.userResponse.strip().upper() == question.correct_answer.strip().upper()
         if is_correct:
             correct_count += 1
             calculated_score += points_per_question 
         
+        detailed_breakdown.append({
+            "question_text": question.text,
+            "is_correct": is_correct,
+            "user_answer": resp.userResponse.upper(),
+            "correct_answer": question.correct_answer
+        })
+        # For storing in database
         detailed_results.append({
             "question_id": question.id,
             "is_correct": is_correct,
@@ -274,16 +437,6 @@ def submit_quiz(payload: QuizSubmitRequest, user: User = Depends(get_current_use
             t.strip(" *\n") for t in re.split(r"\n\s*\*\s+", suggestions_text) if t.strip()
         ]
 
-    # # --- AI Feature: Result Suggestions ---
-    # # TODO: AI Integration
-    # # 1. Analyze the `detailed_results` list for incorrect answers.
-    # # 2. Get the text of the questions the user got wrong.
-    # # 3. Send these topics/questions to your AI model and ask for 2 improvement tips.
-    # ai_suggestions = [
-    #     "Suggestion 1: Review the topic of photosynthesis.",
-    #     "Suggestion 2: Practice more problems involving fractions."
-    # ] # Mock response
-    # # --- End AI Integration ---
     return {
         "submissionId": submission.id,
         "score": submission.score,
@@ -291,7 +444,8 @@ def submit_quiz(payload: QuizSubmitRequest, user: User = Depends(get_current_use
         "correctQuestions": correct_count,
         "totalQuestions": total_questions,
         "submittedAt": submission.submitted_at,
-        "suggestions": ai_suggestions
+        "suggestions": ai_suggestions,
+        "detailed_breakdown": detailed_breakdown
     }
 
 @app.get("/quiz/history", response_model=List[SubmissionOut])
@@ -327,6 +481,40 @@ def get_quiz_history(
             is_retry=s.is_retry
         ) for s in submissions
     ]
+
+@app.get("/quiz/history/{submission_id}", response_model=SubmissionReviewOut)
+def get_submission_details(submission_id: int, user: User = Depends(get_current_user)):
+    """
+    Retrieves the detailed results of a specific, single quiz submission
+    for the currently authenticated user.
+    """
+    try:
+        submission = Submission.objects.select_related('quiz').get(id=submission_id, user=user)
+    except Submission.DoesNotExist:
+        raise HTTPException(status_code=404, detail="Submission not found or you do not have permission to view it.")
+
+    question_texts = {q.id: q.text for q in submission.quiz.questions.all()}
+
+    question_reviews = []
+    for result_item in submission.results:
+        question_id = result_item.get("question_id")
+        question_reviews.append(
+            QuestionReview(
+                question_text=question_texts.get(question_id, "Question text not found."),
+                your_answer=result_item.get("user_answer").upper(),
+                correct_answer=result_item.get("correct_answer"),
+                is_correct=result_item.get("is_correct")
+            )
+        )
+
+    return SubmissionReviewOut(
+        submission_id=submission.id,
+        quiz_title=submission.quiz.title,
+        score=submission.score,
+        max_score=submission.max_score,
+        submitted_at=submission.submitted_at,
+        questions=question_reviews
+    )
 
 @app.post("/quiz/retry/{submission_id}", response_model=QuizOut)
 def retry_quiz(submission_id: int, user: User = Depends(get_current_user)):
