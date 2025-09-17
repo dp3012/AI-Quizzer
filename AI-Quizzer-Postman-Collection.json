@@ -1,0 +1,309 @@
+{
+	"info": {
+		"_postman_id": "3098ccfb-f78f-4a6c-92e7-62bc5397039c",
+		"name": "AI Quizzer API - Science Test",
+		"description": "A collection of API endpoints for the AI Quizzer application, pre-configured for a Science quiz test case. All protected endpoints automatically use the JWT token obtained from the login request.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "48405393",
+		"_collection_link": "https://pdarsh409-7164208.postman.co/workspace/Darsh-Patel's-Workspace~eacbde73-9019-43b5-8c38-0ac435df7922/collection/48405393-3098ccfb-f78f-4a6c-92e7-62bc5397039c?action=share&source=collection_link&creator=48405393"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "/auth/login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Automatically save the received token to a collection variable",
+									"if (pm.response.code === 200) {",
+									"    let responseData = pm.response.json();",
+									"    // Use the exact key from your API response",
+									"    let token = responseData.access_token; ",
+									"    ",
+									"    if (token) {",
+									"        pm.collectionVariables.set(\"jwt_token\", token);",
+									"        console.log(\"JWT Token saved successfully!\");",
+									"    } else {",
+									"        console.log(\"Could not find 'access_token' in the response.\");",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"recruiter\",\n    \"password\": \"password123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"description": "Authenticates a user and returns a JWT access token. This mock service accepts any username/password. The received token is automatically saved as a collection variable (`jwt_token`) for use in other requests."
+					},
+					"response": []
+				}
+			],
+			"description": "Handles user authentication."
+		},
+		{
+			"name": "Quiz Management",
+			"item": [
+				{
+					"name": "/quiz/generate",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"grade\": 10,\n    \"subject\": \"Science\",\n    \"total_questions\": 5,\n    \"max_score\": 100\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz/generate",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"generate"
+							]
+						},
+						"description": "Generates a new, AI-powered quiz adapted to the user's skill level."
+					},
+					"response": []
+				},
+				{
+					"name": "/quiz/submit",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"quizId\": 12,\n    \"responses\": [\n        {\n            \"questionId\": 51,\n            \"userResponse\": \"b\"\n        },\n        {\n            \"questionId\": 52,\n            \"userResponse\": \"C\"\n        },\n        {\n            \"questionId\": 53,\n            \"userResponse\": \"D\"\n        },\n        {\n            \"questionId\": 54,\n            \"userResponse\": \"B\"\n        },\n        {\n            \"questionId\": 55,\n            \"userResponse\": \"A\"\n        }\n    ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz/submit",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"submit"
+							]
+						},
+						"description": "Submits a user's answers, calculates the score, and returns a detailed breakdown with AI-powered suggestions. **Note:** You must replace the `quizId` and `questionId` values with valid IDs received from the `/quiz/generate` response."
+					},
+					"response": []
+				},
+				{
+					"name": "/quiz/hint",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"questionId\": 55\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/quiz/hint",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"hint"
+							]
+						},
+						"description": "Provides an AI-generated hint for a specific question. **Note:** You must replace the `questionId` with a valid ID from a generated quiz."
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for creating and interacting with quizzes."
+		},
+		{
+			"name": "History & Review",
+			"item": [
+				{
+					"name": "/quiz/history (List)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/history?subject=Science",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"history"
+							],
+							"query": [
+								{
+									"key": "subject",
+									"value": "Science"
+								}
+							]
+						},
+						"description": "Retrieves a summary list of all quizzes the authenticated user has taken. Supports filtering via query parameters."
+					},
+					"response": []
+				},
+				{
+					"name": "/quiz/history/{id} (Detail)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/history/8",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"history",
+								"8"
+							]
+						},
+						"description": "Retrieves a detailed review of a single, specific past submission. **Note:** You must replace the `1` in the URL with a valid `submission_id` from the history list or submit response."
+					},
+					"response": []
+				},
+				{
+					"name": "/quiz/retry/{id}",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/quiz/retry/8",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"quiz",
+								"retry",
+								"8"
+							]
+						},
+						"description": "Returns the data for a previous quiz, allowing a user to retry it. **Note:** You must replace the `1` in the URL with a valid `submission_id`."
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for viewing user submission history."
+		},
+		{
+			"name": "Leaderboard",
+			"item": [
+				{
+					"name": "/leaderboard",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/leaderboard?subject=Science",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leaderboard"
+							],
+							"query": [
+								{
+									"key": "subject",
+									"value": "Science",
+									"description": "(Optional) Filter the leaderboard by subject."
+								},
+								{
+									"key": "grade",
+									"value": null,
+									"disabled": true
+								}
+							]
+						},
+						"description": "Returns the top 10 scores. This endpoint is public and can be filtered by `subject` and `grade`."
+					},
+					"response": []
+				}
+			],
+			"description": "Public leaderboard endpoint."
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://YOUR_RENDER_URL_HERE"
+		},
+		{
+			"key": "jwt_token",
+			"value": ""
+		}
+	]
+}
