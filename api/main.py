@@ -110,7 +110,7 @@ def root():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>AI Quizzer API</title>
+        <title>AI Quizzer APP</title>
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
             
@@ -208,6 +208,13 @@ def root():
                 font-size: 0.9em;
                 color: #4DB6AC;
             }
+            .footer {
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #333;
+                font-size: 0.9em;
+                color: #888;
+            }
         </style>
     </head>
     <body>
@@ -218,7 +225,7 @@ def root():
 
             <div class="section">
                 <h2>Getting Started</h2>
-                <p>Interact with the APIs through the documentation or your favorite API client.</p>
+                <p>Interact with the APIs through the interactive documentation or your favorite API client.</p>
                 <div class="buttons">
                     <a href="/docs" class="button">API Docs</a>
                     <a href="https://github.com/dp3012/AI-Quizzer" class="button button-secondary" target="_blank">GitHub Repo</a>
@@ -228,16 +235,20 @@ def root():
             <div class="section">
                 <h2>Key Features</h2>
                 <ul>
-                    <li><strong>Adaptive Quiz Generation:</strong> Creates quizzes tailored to user performance.</li>
-                    <li><strong>AI-Powered Hints:</strong> Provides helpful hints without giving away the answer.</li>
-                    <li><strong>Smart Result Suggestions:</strong> Offers personalized improvement tips.</li>
-                    <li><strong>Comprehensive History:</strong> Tracks submissions with advanced filtering.</li>
-                    <li><strong>Leaderboard:</strong> Ranks top performers by subject and grade.</li>
+                    <li>🧠 <strong>Adaptive Quiz Generation:</strong> Creates quizzes tailored to user performance.</li>
+                    <li>💡 <strong>AI-Powered Hints:</strong> Provides helpful hints without giving away the answer.</li>
+                    <li>📈 <strong>Smart Result Suggestions:</strong> Offers personalized improvement tips.</li>
+                    <li>📜 <strong>Comprehensive History:</strong> Tracks submissions with advanced filtering.</li>
+                    <li>🏆 <strong>Leaderboard:</strong> Ranks top performers by subject and grade.</li>
                 </ul>
             </div>
 
             <div class="tech-stack">
                 <p><strong style="color: #bb86fc;">Tech Stack:</strong> FastAPI | Django ORM | PostgreSQL | Docker | Gemini AI | Render</p>
+            </div>
+            
+            <div class="footer">
+                <p>Created by Darsh D. Patel from B.E - IV</p>
             </div>
         </div>
     </body>
