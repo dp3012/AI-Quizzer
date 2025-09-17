@@ -566,7 +566,7 @@ def get_hint(payload: HintRequest, user: User = Depends(get_current_user)):
 
     return {"questionId": question.id, "hint": ai_hint.strip()}
 
-@app.post("/leaderboard", response_model=List[LeaderboardEntry])
+@app.get("/leaderboard", response_model=List[LeaderboardEntry])
 def get_leaderboard(
     subject: Optional[str] = Query(None),
     grade: Optional[int] = Query(None)
